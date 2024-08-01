@@ -6,6 +6,6 @@ This setup utilizes the folowing tools:
 
 - `dnsmasq`: Dynamically updates an ipset with IPs resolved for specified domains.
 - `dnscrypt`: Secures DNS queries with DNS-over-HTTPS.
-- `Shadowsocks`: Establishes an encrypted tunnel for selective traffic routing.
-- `iptables`: Sets up rules for traffic forwarding based on domain membership in the ipset.
-- `ip route`: Configures routing tables to direct traffic through the Shadowsocks tunnel.
+- `iptables`: Marks packets belonging to IPs from the ipset.
+- `ip route`: Configures routing tables to route marked traffic through the tunnel.
+- Shadowsocks or another proxy/VPN: Establishes an encrypted tunnel for selective traffic routing.
