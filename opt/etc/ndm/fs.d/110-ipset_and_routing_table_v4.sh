@@ -2,7 +2,7 @@
 
 [ "$1" != "start" ] && exit 0
 
-### Create set
+### Create ipv4 set
 ipset -! create unblock4 hash:net timeout 86400
 
 ### Create routing tables for marked packets

@@ -2,7 +2,7 @@
 
 [ "$1" != "start" ] && exit 0
 
-### Create set
+### Create ipv6 set
 ipset -! create unblock6 hash:net family inet6 timeout 86400
 
 ### Create routing tables for marked packets
