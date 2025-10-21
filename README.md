@@ -12,19 +12,6 @@
 
 ---
 
-# [ENG] Domain-Based Traffic Routing for Keenetic
-
-This repository provides scripts and configurations to route traffic for specific domain names through a tunnel on your Keenetic router, allowing you to bypass censorship.
-
-This setup utilizes the folowing tools:
-
-- `dnsmasq`: Dynamically updates an ipset with IPs resolved for specified domains.
-- `dnscrypt`: Secures DNS queries with DNS-over-HTTPS.
-- `iptables`: Marks packets belonging to IPs from the ipset.
-- `ip route`: Configures routing tables to route marked traffic through the tunnel.
-- Shadowsocks or another proxy/VPN: Establishes an encrypted tunnel for selective traffic routing.
-
----
 ## Принцип работы
 
 ### Общая концепция
@@ -70,50 +57,3 @@ This setup utilizes the folowing tools:
 4.  **Маркировка трафика:** `iptables` видит трафик на IP из `ipset` и ставит на него метку.
 5.  **Перенаправление:** Ядро направляет маркированный трафик в туннель.
 6.  **Остальной трафик:** Если домена нет в списке, его трафик идет напрямую, мимо туннеля.
-
----
-## How it works
-
-### Overall Concept
-
-This is a solution for Keenetic routers that allows routing traffic to specific sites (domains) through an encrypted tunnel (in this case, created using Shadowsocks), while all other traffic goes directly. This is a classic example of domain-based `split-tunneling`.
-
-### Components and Interaction
-
-The system relies on the cooperation of several components: `Shadowsocks` (or another proxy/VPN), `dnsmasq`, `dnscrypt-proxy`, `ipset`, and `iptables` scripts.
-
-Here is a step-by-step description of the process:
-
-**1. Tunnel Creation and Base Routing (on router startup)**
-
-*   [`opt/etc/shadowsocks-rust.json`](opt/etc/shadowsocks-rust.json): This is the configuration file for the `shadowsocks-rust` client, which creates a virtual network interface `tun0`.
-*   [`opt/etc/ndm/fs.d/100-tun0-interface.sh`](opt/etc/ndm/fs.d/100-tun0-interface.sh): This script creates the `tun0` interface on system startup.
-*   [`opt/etc/ndm/fs.d/110-ipset_and_routing_table_v4.sh`](opt/etc/ndm/fs.d/110-ipset_and_routing_table_v4.sh) & [`opt/etc/ndm/fs.d/111-ipset_and_routing_table_v6.sh`](opt/etc/ndm/fs.d/111-ipset_and_routing_table_v6.sh): These scripts create:
-    *   `ipsets` named `unblock4` and `unblock6` to store IP addresses.
-    *   A separate routing table (`table 1`) and a rule (`ip rule add fwmark 1 table 1`), which directs all traffic with firewall mark `1` to this table.
-    *   A default route in `table 1` that sends all its traffic to the `tun0` interface.
-
-**2. DNS Query Handling (The Key Step)**
-
-*   When a device on your local network requests a domain (e.g., `facebook.com`), the request goes to the router's `dnsmasq`.
-*   `dnsmasq` ([`opt/etc/dnsmasq.conf`](opt/etc/dnsmasq.conf)) forwards the request to `dnscrypt-proxy` (`127.0.0.1#5335`).
-*   `dnscrypt-proxy` ([`opt/etc/dnscrypt-proxy.toml`](opt/etc/dnscrypt-proxy.toml)) securely resolves the IP address (via DoH) and returns it to `dnsmasq`.
-*   `dnsmasq` sees the `ipset=/.../facebook.com/.../unblock4,unblock6` directive and **adds the resolved IP address to the `unblock4` and `unblock6` ipsets**.
-*   `dnsmasq` returns the IP address to the client.
-
-**3. Traffic Marking and Redirection**
-
-*   The client starts sending packets to the resolved IP address.
-*   [`opt/etc/ndm/netfilter.d/100-fwmarks_v4.sh`](opt/etc/ndm/netfilter.d/100-fwmarks_v4.sh) & [`opt/etc/ndm/netfilter.d/101-fwmarks_v6.sh`](opt/etc/ndm/netfilter.d/101-fwmarks_v6.sh): These scripts configure `iptables`. The rules check if the destination IP of a packet belongs to the `unblock4` or `unblock6` `ipset`. If it does, the **connection is marked with firewall mark `1`**.
-*   The system's kernel sees the mark `1` and, according to the `ip rule`, uses routing `table 1`.
-*   `table 1` directs the packet to the `tun0` interface, i.e., into the tunnel.
-*   The [`opt/etc/ndm/netfilter.d/110-tun0-nat_v4.sh`](opt/etc/ndm/netfilter.d/110-tun0-nat_v4.sh), [`opt/etc/ndm/netfilter.d/110-tun0-nat_v6.sh`](opt/etc/ndm/netfilter.d/110-tun0-nat_v6.sh), [`opt/etc/ndm/netfilter.d/110-tun0-filter_v4.sh`](opt/etc/ndm/netfilter.d/110-tun0-filter_v4.sh) and [`opt/etc/ndm/netfilter.d/110-tun0-filter_v6.sh`](opt/etc/ndm/netfilter.d/110-tun0-filter_v6.sh) scripts ensure proper NAT and firewall traversal for the tunneled traffic.
-
-### Process Summary
-
-1.  **Startup:** The router creates the tunnel, `ipsets`, and routing rules.
-2.  **DNS Query:** A client requests a domain listed in `dnsmasq.conf`.
-3.  **`ipset` Population:** `dnsmasq` resolves the domain to an IP and automatically adds that IP to the `ipset`.
-4.  **Traffic Marking:** `iptables` sees traffic going to an IP from the `ipset` and marks it.
-5.  **Redirection:** The kernel directs the marked traffic into the tunnel.
-6.  **Other Traffic:** If a domain is not on the list, its traffic is not marked and goes directly to the internet, bypassing the tunnel.
